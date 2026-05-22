@@ -83,7 +83,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem 1.5rem;
+      padding: 2rem 18px;
       opacity: 0;
       pointer-events: none;
       transition: opacity 1.8s ease 0.3s;
@@ -98,49 +98,21 @@
       text-align: center;
     }
 
-    #heart-top {
-      font-size: clamp(2.5rem, 10vw, 4rem);
-      display: block;
-      margin-bottom: 1.2rem;
-      animation: heartbeat 1.3s ease-in-out infinite;
-    }
-
-    @keyframes heartbeat {
-      0%, 100% { transform: scale(1); }
-      15%       { transform: scale(1.22); }
-      30%       { transform: scale(1); }
-      45%       { transform: scale(1.14); }
-      70%       { transform: scale(1); }
-    }
-
     #message-text {
-      font-size: clamp(0.95rem, 3.8vw, 1.2rem);
+      font-size: clamp(0.76rem, 3.04vw, 0.96rem);
       line-height: 1.95;
       color: #fff;
       white-space: pre-line;
       word-break: break-word;
+      opacity: 1;
+      transition: opacity 0.8s ease;
     }
 
-    #heart-bottom {
-      display: block;
-      margin-top: 1.6rem;
-      font-size: clamp(1.4rem, 6vw, 2rem);
-      animation: heartbeat 1.3s ease-in-out infinite;
-    }
+    #message-text.fade-out { opacity: 0; }
 
-    /* Falling petals */
-    .petal {
-      position: fixed;
-      top: -2rem;
-      opacity: 0;
-      pointer-events: none;
-      user-select: none;
-      animation: fall linear infinite;
-    }
-    @keyframes fall {
-      0%   { transform: translateY(0) rotate(0deg);      opacity: 0.85; }
-      100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
-    }
+    #message-text.is-title { text-align: center; }
+    #message-text.is-body { text-align: left; }
+
   </style>
 </head>
 <body>
@@ -156,18 +128,16 @@
 
   <div id="message-layer">
     <div id="message-box">
-      <span id="heart-top">❤️</span>
       <p id="message-text"></p>
-      <span id="heart-bottom">🌸</span>
     </div>
   </div>
 
   <script>
     /* ── Slideshow ── */
-    const IMAGES = Array.from({ length: 20 }, (_, i) => `hinhanh/an_${String(i + 1).padStart(2, '0')}.webp`);
+    const IMAGES = Array.from({ length: 35 }, (_, i) => `hinhanh/hinhanh_${String(i + 1).padStart(2, '0')}.JPG`);
     const bgLayer = document.getElementById('bg-layer');
 
-    /* build 4 img elements, stack them */
+    /* build img elements, stack them */
     const slides = IMAGES.map((src, i) => {
       const img = document.createElement('img');
       img.src       = src;
@@ -178,44 +148,95 @@
     });
 
     let currentSlide = 0;
-    /* 10s / 60 lần = 167ms mỗi ảnh */
-    const slideInterval = setInterval(() => {
-      slides[currentSlide].classList.remove('active');
-      currentSlide = (currentSlide + 1) % slides.length;
-      slides[currentSlide].classList.add('active');
-    }, 167);
 
-    /* ── Counter 0 → 150 in 10 s ── */
+    /* ── Counter 0 → 150 in 12 s ── */
     const counterNumEl  = document.getElementById('counter-num');
     const counterLayer  = document.getElementById('counter-layer');
     const messageLayer  = document.getElementById('message-layer');
     const messageText   = document.getElementById('message-text');
 
     const MESSAGE =
-`Chúc mừng hành trình tình yêu của bọn mình 🎉
+`Happy Anniversary 🎉
 
-Mình và Beo đã cùng nhau yêu nhau đến nay đã nửa năm rồi. Điều mình thấy hạnh phúc và tự hào trong mối quan hệ này là bọn mình rất trân trọng nhau.
+Mình rất biết ơn và trân trọng vì chúng ta đã tiến đến cột mốc hôm nay 23/11/25 - 23/5/26. Quá nhiều câu chuyện, quá nhiều niềm vui và quá nhiều cái dễ thương đã xảy đến với riêng mình trong thời gian 6 tháng qua.
 
-Đây có phải là mối quan hệ lành mạnh với beo không? Với mình, đây là một điều tuyệt vời và nhẹ nhàng mà thế giới này đem đến :3
+Quá nhiều cái ôm, quá nhiều mimi, quá nhiều những km cùng với nhau và quá nhiều điều thú vị cùng nhau khám phá ra...
 
-Bọn mình cùng nhau chinh phục các cột mốc tiếp theo nhe.
+Quá nhiều nên mình yêu Beo nhiều quá ❤️
 
-tui iu bạn, bạn cũm thisaaa ❤️`;
+Cảm ơn Beo đã đồng hành cùng mình 6 tháng qua. C tiếp tục như thế đến khi về chung 1 nhà luôn he =)), 
 
-    messageText.textContent = MESSAGE;
+Love you Beo ❤️`;
 
-    const COUNT_DURATION = 10000;
+    const MESSAGE_LINES = MESSAGE.split(/\n\s*\n/);
+
+    const COUNT_DURATION = 12000;
     const COUNT_TARGET   = 150;
+    const SLIDE_EASE_START = 149;
     let   startTime      = null;
     let   lastDisplayed  = -1;
 
     function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+    function inverseEaseOutCubic(t) { return 1 - Math.pow(1 - t, 1 / 3); }
+
+    function getSlideProgress(progress) {
+      const easeStartRatio = SLIDE_EASE_START / COUNT_TARGET;
+      const easeStartTime  = inverseEaseOutCubic(easeStartRatio);
+
+      if (progress < easeStartTime) {
+        return (progress / easeStartTime) * easeStartRatio;
+      }
+
+      const remainingProgress = (progress - easeStartTime) / (1 - easeStartTime);
+      return easeStartRatio + easeOutCubic(remainingProgress) * (1 - easeStartRatio);
+    }
+
+    function showSlide(index) {
+      if (index === currentSlide) return;
+      slides[currentSlide].classList.remove('active');
+      slides[index].classList.add('active');
+      currentSlide = index;
+    }
+
+    function typeText(text, index = 0, onComplete = () => {}) {
+      messageText.textContent = text.slice(0, index);
+
+      if (index < text.length) {
+        const char = text[index];
+        const delay = char === '\n' ? 260 : 42;
+        setTimeout(() => typeText(text, index + 1, onComplete), delay);
+      } else {
+        onComplete();
+      }
+    }
+
+    function showMessageLine(lineIndex = 0) {
+      if (lineIndex >= MESSAGE_LINES.length) return;
+
+      messageText.classList.remove('fade-out');
+      messageText.classList.toggle('is-title', lineIndex === 0);
+      messageText.classList.toggle('is-body', lineIndex !== 0);
+      typeText(MESSAGE_LINES[lineIndex], 0, () => {
+        setTimeout(() => {
+          messageText.classList.add('fade-out');
+          setTimeout(() => {
+            messageText.textContent = '';
+            showMessageLine(lineIndex + 1);
+          }, 800);
+        }, 3000);
+      });
+    }
 
     function animateCounter(timestamp) {
       if (!startTime) startTime = timestamp;
-      const elapsed  = timestamp - startTime;
-      const progress = Math.min(elapsed / COUNT_DURATION, 1);
-      const current  = Math.round(easeOutCubic(progress) * COUNT_TARGET);
+      const elapsed       = timestamp - startTime;
+      const progress      = Math.min(elapsed / COUNT_DURATION, 1);
+      const easedProgress = easeOutCubic(progress);
+      const current       = Math.round(easedProgress * COUNT_TARGET);
+      const slideProgress = getSlideProgress(progress);
+      const slideIndex    = Math.min(Math.floor(slideProgress * slides.length), slides.length - 1);
+
+      showSlide(slideIndex);
 
       if (current !== lastDisplayed) {
         counterNumEl.textContent     = current;
@@ -227,33 +248,16 @@ tui iu bạn, bạn cũm thisaaa ❤️`;
       if (progress < 1) {
         requestAnimationFrame(animateCounter);
       } else {
-        clearInterval(slideInterval);
         bgLayer.classList.add('fade-out');
         counterLayer.classList.add('fade-out');
         setTimeout(() => {
           messageLayer.classList.add('visible');
-          spawnPetals();
+          showMessageLine();
         }, 2000);
       }
     }
 
     requestAnimationFrame(animateCounter);
-
-    /* ── Falling petals (message screen) ── */
-    const PETALS = ['🌸', '🌺', '💗', '🌹', '💕', '✨'];
-
-    function spawnPetals() {
-      for (let i = 0; i < 22; i++) {
-        const el = document.createElement('span');
-        el.className = 'petal';
-        el.textContent             = PETALS[Math.floor(Math.random() * PETALS.length)];
-        el.style.left              = Math.random() * 100 + 'vw';
-        el.style.animationDuration = (4 + Math.random() * 7) + 's';
-        el.style.animationDelay    = (Math.random() * 6) + 's';
-        el.style.fontSize          = (0.8 + Math.random() * 1.3) + 'rem';
-        document.body.appendChild(el);
-      }
-    }
   </script>
 </body>
 </html>
