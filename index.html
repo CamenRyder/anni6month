@@ -49,11 +49,41 @@
       margin-bottom: 0.8rem;
       opacity: 0;
       line-height: 1.35;
-      transition: opacity 0.4s ease;
+      transform: translateY(6px);
+      will-change: opacity, transform, filter;
     }
 
-    #splash-message.visible {
+    #splash-message.is-cycling {
+      animation: splash-message-cycle 3s ease-in-out both;
+    }
+
+    #splash-message.is-final {
       opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    @keyframes splash-message-cycle {
+      0% {
+        opacity: 0;
+        transform: translateY(7px);
+        filter: blur(3px);
+      }
+      16% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+      }
+      76% {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-5px);
+        filter: blur(2px);
+      }
     }
 
     #splash-track {
@@ -276,6 +306,40 @@
       display: none;
     }
 
+    #romantic-back-button {
+      position: fixed;
+      right: 18px;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      z-index: 4;
+      width: 44px;
+      height: 44px;
+      border: 1px solid rgba(255, 255, 255, 0.52);
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.42);
+      color: #fff;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      line-height: 1;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: opacity 0.28s ease, transform 0.28s ease, background 0.2s ease;
+    }
+
+    #romantic-back-button.visible {
+      display: flex;
+    }
+
+    #romantic-back-button:active {
+      transform: scale(0.94);
+    }
+
+    #romantic-back-button:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
     .photo-focus-backdrop {
       position: fixed;
       inset: 0;
@@ -376,6 +440,7 @@
 
   <div id="message-layer">
     <div id="photo-grid-layer"></div>
+    <button id="romantic-back-button" type="button" aria-label="Quay lại">‹</button>
     <div id="message-box">
       <div id="message-text"></div>
     </div>
@@ -407,9 +472,7 @@
     ];
     const SPLASH_FALLBACK_MESSAGE = 'có thể có trục chặc, cậu nhắn mìh nha';
     const SPLASH_MESSAGE_DURATION = 3000;
-    const SPLASH_MESSAGE_FADE_OUT_AT = 2600;
     let splashMessageTimeout = null;
-    let splashFadeTimeout = null;
     let splashMessageDone = false;
 
     let slides = [];
@@ -421,6 +484,7 @@
     const messageLayer  = document.getElementById('message-layer');
     const messageText   = document.getElementById('message-text');
     const photoGridLayer = document.getElementById('photo-grid-layer');
+    const romanticBackButton = document.getElementById('romantic-back-button');
     let finalBackgroundStarted = false;
     let finalTimeInterval = null;
     let finalScene = 'time';
@@ -439,6 +503,11 @@
       lastX: 0,
       lastY: 0,
       lastTime: 0,
+      dragDistance: 0,
+      activePointers: new Map(),
+      isPinching: false,
+      pinchStartDistance: 0,
+      pinchStartZoom: 1,
       moved: false,
     };
     const honeycombConfig = {
@@ -446,9 +515,15 @@
       gap: 16,
       maxScale: 1.34,
       minScale: 0.66,
+      viewZoom: 1,
+      minViewZoom: 0.82,
+      maxViewZoom: 2.25,
       focusRadius: 230,
       inertiaFriction: 0.92,
       springStrength: 0.18,
+      dragThreshold: 10,
+      maxPanViewportRatio: 1,
+      maxVelocity: 18,
     };
 
     const MESSAGE =
@@ -504,7 +579,6 @@ I love Beo ❤️`;
     function stopSplashMessages() {
       splashMessageDone = true;
       clearTimeout(splashMessageTimeout);
-      clearTimeout(splashFadeTimeout);
     }
 
     function showSplashMessage(index = 0) {
@@ -513,16 +587,22 @@ I love Beo ❤️`;
       const message = SPLASH_MESSAGES[index] || SPLASH_FALLBACK_MESSAGE;
       const hasNextMessage = index < SPLASH_MESSAGES.length;
       splashMessage.textContent = message;
-      splashMessage.classList.add('visible');
+      splashMessage.classList.remove('is-cycling', 'is-final');
 
       if (hasNextMessage) {
-        splashFadeTimeout = setTimeout(() => {
-          splashMessage.classList.remove('visible');
-        }, SPLASH_MESSAGE_FADE_OUT_AT);
+        requestAnimationFrame(() => {
+          if (splashMessageDone) return;
+          splashMessage.classList.add('is-cycling');
+        });
 
         splashMessageTimeout = setTimeout(() => {
           showSplashMessage(index + 1);
         }, SPLASH_MESSAGE_DURATION);
+      } else {
+        requestAnimationFrame(() => {
+          if (splashMessageDone) return;
+          splashMessage.classList.add('is-final');
+        });
       }
     }
 
@@ -663,6 +743,25 @@ I love Beo ❤️`;
       return honeycombConfig.minScale + (honeycombConfig.maxScale - honeycombConfig.minScale) * focus;
     }
 
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function getHoneycombPanBounds() {
+      return {
+        x: window.innerWidth * honeycombConfig.maxPanViewportRatio * honeycombConfig.viewZoom,
+        y: window.innerHeight * honeycombConfig.maxPanViewportRatio * honeycombConfig.viewZoom,
+      };
+    }
+
+    function clampHoneycombPan() {
+      const bounds = getHoneycombPanBounds();
+      honeycombState.targetX = clamp(honeycombState.targetX, -bounds.x, bounds.x);
+      honeycombState.targetY = clamp(honeycombState.targetY, -bounds.y, bounds.y);
+      honeycombState.x = clamp(honeycombState.x, -bounds.x, bounds.x);
+      honeycombState.y = clamp(honeycombState.y, -bounds.y, bounds.y);
+    }
+
     function renderHoneycomb() {
       if (honeycombState.isDragging) {
         honeycombState.x += (honeycombState.targetX - honeycombState.x) * honeycombConfig.springStrength;
@@ -670,6 +769,7 @@ I love Beo ❤️`;
       } else {
         honeycombState.targetX += honeycombState.vx;
         honeycombState.targetY += honeycombState.vy;
+        clampHoneycombPan();
         honeycombState.vx *= honeycombConfig.inertiaFriction;
         honeycombState.vy *= honeycombConfig.inertiaFriction;
         honeycombState.x += (honeycombState.targetX - honeycombState.x) * honeycombConfig.springStrength;
@@ -677,11 +777,13 @@ I love Beo ❤️`;
       }
 
       honeycombItems.forEach((item) => {
-        const screenX = window.innerWidth / 2 + item.x + honeycombState.x;
-        const screenY = window.innerHeight / 2 + item.y + honeycombState.y;
+        const positionedX = item.x * honeycombConfig.viewZoom + honeycombState.x;
+        const positionedY = item.y * honeycombConfig.viewZoom + honeycombState.y;
+        const screenX = window.innerWidth / 2 + positionedX;
+        const screenY = window.innerHeight / 2 + positionedY;
         const scale = getItemScale(screenX, screenY);
         const depth = 1 + (scale - honeycombConfig.minScale) * 0.12;
-        item.el.style.transform = `translate3d(calc(-50% + ${item.x + honeycombState.x}px), calc(-50% + ${item.y + honeycombState.y}px), 0) scale(${scale * depth})`;
+        item.el.style.transform = `translate3d(calc(-50% + ${positionedX}px), calc(-50% + ${positionedY}px), 0) scale(${scale * depth * honeycombConfig.viewZoom})`;
         item.el.style.opacity = String(0.5 + scale * 0.38);
       });
 
@@ -697,28 +799,66 @@ I love Beo ❤️`;
     // 3. Xử lý pan/drag bằng mouse và touch.
     function handleHoneycombPointerDown(event) {
       if (!photoGridLayer.classList.contains('visible') || photoFocused) return;
+      event.preventDefault();
+      honeycombState.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      photoGridLayer.setPointerCapture(event.pointerId);
+      if (honeycombState.activePointers.size === 2) {
+        const points = Array.from(honeycombState.activePointers.values());
+        honeycombState.isPinching = true;
+        honeycombState.isDragging = false;
+        honeycombState.moved = true;
+        honeycombState.pinchStartDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        honeycombState.pinchStartZoom = honeycombConfig.viewZoom;
+        honeycombState.vx = 0;
+        honeycombState.vy = 0;
+        return;
+      }
       honeycombState.isDragging = true;
       honeycombState.lastX = event.clientX;
       honeycombState.lastY = event.clientY;
       honeycombState.lastTime = performance.now();
+      honeycombState.dragDistance = 0;
       honeycombState.vx = 0;
       honeycombState.vy = 0;
       honeycombState.moved = false;
-      photoGridLayer.setPointerCapture(event.pointerId);
     }
 
     function handleHoneycombPointerMove(event) {
+      if (honeycombState.activePointers.has(event.pointerId)) {
+        honeycombState.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      }
+
+      if (honeycombState.isPinching && honeycombState.activePointers.size >= 2) {
+        event.preventDefault();
+        const points = Array.from(honeycombState.activePointers.values());
+        const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        const nextZoom = honeycombState.pinchStartZoom * (distance / Math.max(1, honeycombState.pinchStartDistance));
+        honeycombConfig.viewZoom = clamp(nextZoom, honeycombConfig.minViewZoom, honeycombConfig.maxViewZoom);
+        clampHoneycombPan();
+        return;
+      }
+
       if (!honeycombState.isDragging) return;
+      event.preventDefault();
       const now = performance.now();
       const dx = event.clientX - honeycombState.lastX;
       const dy = event.clientY - honeycombState.lastY;
       const dt = Math.max(16, now - honeycombState.lastTime);
 
-      if (Math.hypot(dx, dy) > 2) honeycombState.moved = true;
+      honeycombState.dragDistance += Math.hypot(dx, dy);
+      if (honeycombState.dragDistance > honeycombConfig.dragThreshold) {
+        honeycombState.moved = true;
+      } else {
+        honeycombState.lastX = event.clientX;
+        honeycombState.lastY = event.clientY;
+        honeycombState.lastTime = now;
+        return;
+      }
       honeycombState.targetX += dx;
       honeycombState.targetY += dy;
-      honeycombState.vx = dx / dt * 16;
-      honeycombState.vy = dy / dt * 16;
+      clampHoneycombPan();
+      honeycombState.vx = clamp(dx / dt * 16, -honeycombConfig.maxVelocity, honeycombConfig.maxVelocity);
+      honeycombState.vy = clamp(dy / dt * 16, -honeycombConfig.maxVelocity, honeycombConfig.maxVelocity);
       honeycombState.lastX = event.clientX;
       honeycombState.lastY = event.clientY;
       honeycombState.lastTime = now;
@@ -726,9 +866,18 @@ I love Beo ❤️`;
 
     // 5. Inertia/momentum sau khi thả tay.
     function handleHoneycombPointerUp(event) {
+      honeycombState.activePointers.delete(event.pointerId);
+      if (honeycombState.isPinching && honeycombState.activePointers.size < 2) {
+        honeycombState.isPinching = false;
+        honeycombState.isDragging = false;
+        return;
+      }
+
       if (!honeycombState.isDragging) return;
       honeycombState.isDragging = false;
-      photoGridLayer.releasePointerCapture(event.pointerId);
+      if (photoGridLayer.hasPointerCapture(event.pointerId)) {
+        photoGridLayer.releasePointerCapture(event.pointerId);
+      }
       setTimeout(() => {
         honeycombState.moved = false;
       }, 80);
@@ -807,6 +956,7 @@ I love Beo ❤️`;
       finalScene = 'time';
       messageLayer.classList.remove('photo-mode', 'photo-background');
       photoGridLayer.classList.remove('visible');
+      romanticBackButton.classList.remove('visible');
       messageText.classList.remove('is-title', 'is-body', 'is-finale');
       messageText.classList.add('is-time');
 
@@ -832,6 +982,7 @@ I love Beo ❤️`;
       finalScene = 'timeline';
       messageLayer.classList.remove('photo-mode', 'photo-background');
       photoGridLayer.classList.remove('visible');
+      romanticBackButton.classList.remove('visible');
       messageText.classList.remove('is-title', 'is-finale', 'is-time');
       messageText.classList.add('is-body');
       messageText.innerHTML = `
@@ -849,14 +1000,9 @@ I love Beo ❤️`;
       startHoneycombAnimation();
       messageLayer.classList.add('photo-background', 'photo-mode');
       photoGridLayer.classList.add('visible');
-      messageText.classList.remove('is-title', 'is-body', 'is-finale');
-      messageText.classList.add('is-time');
-      messageText.innerHTML = `
-        <span class="time-title">Kỷ niệm tụi mình</span>
-        <span class="mode-actions">
-          <button class="mode-button" type="button" data-action="back-time">Quay lại</button>
-        </span>
-      `;
+      romanticBackButton.classList.add('visible');
+      messageText.classList.remove('is-title', 'is-body', 'is-finale', 'is-time');
+      messageText.textContent = '';
     }
 
     function showRealtimeLoveCounter() {
@@ -880,6 +1026,10 @@ I love Beo ❤️`;
       }
     });
 
+    romanticBackButton.addEventListener('click', () => {
+      fadeToScene(renderTimeCounter);
+    });
+
     photoGridLayer.addEventListener('pointerdown', handleHoneycombPointerDown);
     photoGridLayer.addEventListener('pointermove', handleHoneycombPointerMove);
     photoGridLayer.addEventListener('pointerup', handleHoneycombPointerUp);
@@ -889,6 +1039,7 @@ I love Beo ❤️`;
       event.preventDefault();
       honeycombState.targetX -= event.deltaX;
       honeycombState.targetY -= event.deltaY;
+      clampHoneycombPan();
     }, { passive: false });
 
     function showMessageLine(lineIndex = 0) {
