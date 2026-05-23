@@ -185,6 +185,107 @@
       letter-spacing: 0.02em;
     }
 
+    .mode-actions {
+      display: flex;
+      justify-content: center;
+      gap: 0.65rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .mode-button {
+      min-width: 4.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.34);
+      color: #fff;
+      cursor: pointer;
+      font-family: 'Times New Roman', Georgia, serif;
+      font-size: 0.78rem;
+      padding: 0.42rem 0.9rem;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+
+    .mode-button:active { transform: scale(0.96); }
+    .mode-button:hover { background: rgba(255, 255, 255, 0.14); }
+
+    #photo-grid-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      opacity: 0;
+      pointer-events: none;
+      overflow: hidden;
+      touch-action: none;
+      filter: saturate(1) brightness(0.82);
+      will-change: opacity, filter;
+      transition: opacity 0.8s ease, filter 0.8s ease;
+    }
+
+    #photo-grid-layer.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #message-layer.photo-mode #photo-grid-layer.visible {
+      filter: saturate(1.06) brightness(0.86);
+    }
+
+    .honeycomb-item {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: var(--item-size);
+      height: var(--item-size);
+      border-radius: 50%;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0.7rem 1.8rem rgba(0, 0, 0, 0.34);
+      cursor: pointer;
+      will-change: transform, opacity;
+      transform: translate3d(-50%, -50%, 0);
+      backface-visibility: hidden;
+    }
+
+    .honeycomb-item img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      transform: scale(1.03);
+      pointer-events: none;
+    }
+
+    #message-layer.photo-background .floating-bg-item {
+      display: none;
+    }
+
+    .photo-focus-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(0, 0, 0, 0);
+      backdrop-filter: blur(0);
+      -webkit-backdrop-filter: blur(0);
+      transition: background 0.38s ease, backdrop-filter 0.38s ease;
+    }
+
+    .photo-focus-backdrop.visible {
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .photo-focus-image {
+      position: fixed;
+      z-index: 51;
+      border-radius: 20px;
+      object-fit: cover;
+      box-shadow: 0 1.4rem 3.2rem rgba(0, 0, 0, 0.48);
+      transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.42s ease;
+      will-change: transform;
+    }
+
     .floating-bg-item {
       position: absolute;
       bottom: -3rem;
@@ -257,8 +358,9 @@
   </div>
 
   <div id="message-layer">
+    <div id="photo-grid-layer"></div>
     <div id="message-box">
-      <p id="message-text"></p>
+      <div id="message-text"></div>
     </div>
   </div>
 
@@ -278,7 +380,36 @@
     const counterLayer  = document.getElementById('counter-layer');
     const messageLayer  = document.getElementById('message-layer');
     const messageText   = document.getElementById('message-text');
+    const photoGridLayer = document.getElementById('photo-grid-layer');
     let finalBackgroundStarted = false;
+    let finalTimeInterval = null;
+    let finalScene = 'time';
+    let photoGridBuilt = false;
+    let photoAnimationStarted = false;
+    let photoFocused = false;
+    const honeycombItems = [];
+    const honeycombState = {
+      x: 0,
+      y: 0,
+      targetX: 0,
+      targetY: 0,
+      vx: 0,
+      vy: 0,
+      isDragging: false,
+      lastX: 0,
+      lastY: 0,
+      lastTime: 0,
+      moved: false,
+    };
+    const honeycombConfig = {
+      itemSize: 82,
+      gap: 16,
+      maxScale: 1.34,
+      minScale: 0.66,
+      focusRadius: 230,
+      inertiaFriction: 0.92,
+      springStrength: 0.18,
+    };
 
     const MESSAGE =
 `Happy Anniversary 🎉
@@ -419,21 +550,279 @@ I love Beo ❤️`;
       }
     }
 
-    function showRealtimeLoveCounter() {
-      messageText.classList.remove('fade-out', 'is-title', 'is-body', 'is-finale');
+    // 1. Khởi tạo dữ liệu 36 ảnh.
+    function getRomanticImages() {
+      return Array.from({ length: 36 }, (_, i) => IMAGES[i % IMAGES.length]);
+    }
+
+    // 2. Render honeycomb grid.
+    function buildPhotoGrid() {
+      if (photoGridBuilt) return;
+      photoGridBuilt = true;
+
+      const images = getRomanticImages();
+      const stepX = honeycombConfig.itemSize + honeycombConfig.gap;
+      const stepY = (honeycombConfig.itemSize + honeycombConfig.gap) * 0.84;
+
+      images.forEach((src, index) => {
+        const row = Math.floor(index / 6);
+        const col = index % 6;
+        const x = (col - 2.5) * stepX + (row % 2 ? stepX / 2 : 0);
+        const y = (row - 2.5) * stepY;
+        const item = document.createElement('button');
+        const img = document.createElement('img');
+
+        item.className = 'honeycomb-item';
+        item.type = 'button';
+        item.style.setProperty('--item-size', `${honeycombConfig.itemSize}px`);
+        img.src = src;
+        img.alt = '';
+        item.appendChild(img);
+        item.addEventListener('click', () => {
+          if (!honeycombState.moved) zoomPhotoIn(item, src);
+        });
+
+        photoGridLayer.appendChild(item);
+        honeycombItems.push({ el: item, x, y });
+      });
+    }
+
+    // 4. Tính scale dựa trên khoảng cách ảnh tới tâm viewport.
+    function getItemScale(screenX, screenY) {
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const distance = Math.hypot(screenX - centerX, screenY - centerY);
+      const focus = Math.max(0, 1 - distance / honeycombConfig.focusRadius);
+      return honeycombConfig.minScale + (honeycombConfig.maxScale - honeycombConfig.minScale) * focus;
+    }
+
+    function renderHoneycomb() {
+      if (honeycombState.isDragging) {
+        honeycombState.x += (honeycombState.targetX - honeycombState.x) * honeycombConfig.springStrength;
+        honeycombState.y += (honeycombState.targetY - honeycombState.y) * honeycombConfig.springStrength;
+      } else {
+        honeycombState.targetX += honeycombState.vx;
+        honeycombState.targetY += honeycombState.vy;
+        honeycombState.vx *= honeycombConfig.inertiaFriction;
+        honeycombState.vy *= honeycombConfig.inertiaFriction;
+        honeycombState.x += (honeycombState.targetX - honeycombState.x) * honeycombConfig.springStrength;
+        honeycombState.y += (honeycombState.targetY - honeycombState.y) * honeycombConfig.springStrength;
+      }
+
+      honeycombItems.forEach((item) => {
+        const screenX = window.innerWidth / 2 + item.x + honeycombState.x;
+        const screenY = window.innerHeight / 2 + item.y + honeycombState.y;
+        const scale = getItemScale(screenX, screenY);
+        const depth = 1 + (scale - honeycombConfig.minScale) * 0.12;
+        item.el.style.transform = `translate3d(calc(-50% + ${item.x + honeycombState.x}px), calc(-50% + ${item.y + honeycombState.y}px), 0) scale(${scale * depth})`;
+        item.el.style.opacity = String(0.5 + scale * 0.38);
+      });
+
+      requestAnimationFrame(renderHoneycomb);
+    }
+
+    function startHoneycombAnimation() {
+      if (photoAnimationStarted) return;
+      photoAnimationStarted = true;
+      requestAnimationFrame(renderHoneycomb);
+    }
+
+    // 3. Xử lý pan/drag bằng mouse và touch.
+    function handleHoneycombPointerDown(event) {
+      if (!photoGridLayer.classList.contains('visible') || photoFocused) return;
+      honeycombState.isDragging = true;
+      honeycombState.lastX = event.clientX;
+      honeycombState.lastY = event.clientY;
+      honeycombState.lastTime = performance.now();
+      honeycombState.vx = 0;
+      honeycombState.vy = 0;
+      honeycombState.moved = false;
+      photoGridLayer.setPointerCapture(event.pointerId);
+    }
+
+    function handleHoneycombPointerMove(event) {
+      if (!honeycombState.isDragging) return;
+      const now = performance.now();
+      const dx = event.clientX - honeycombState.lastX;
+      const dy = event.clientY - honeycombState.lastY;
+      const dt = Math.max(16, now - honeycombState.lastTime);
+
+      if (Math.hypot(dx, dy) > 2) honeycombState.moved = true;
+      honeycombState.targetX += dx;
+      honeycombState.targetY += dy;
+      honeycombState.vx = dx / dt * 16;
+      honeycombState.vy = dy / dt * 16;
+      honeycombState.lastX = event.clientX;
+      honeycombState.lastY = event.clientY;
+      honeycombState.lastTime = now;
+    }
+
+    // 5. Inertia/momentum sau khi thả tay.
+    function handleHoneycombPointerUp(event) {
+      if (!honeycombState.isDragging) return;
+      honeycombState.isDragging = false;
+      photoGridLayer.releasePointerCapture(event.pointerId);
+      setTimeout(() => {
+        honeycombState.moved = false;
+      }, 80);
+    }
+
+    // 6. Zoom ảnh lên full screen.
+    function zoomPhotoIn(sourceEl, src) {
+      if (photoFocused) return;
+      photoFocused = true;
+      const rect = sourceEl.getBoundingClientRect();
+      const backdrop = document.createElement('div');
+      const preview = document.createElement('img');
+      const viewportPadding = 26;
+      const maxHeight = window.innerHeight - viewportPadding * 2;
+      const maxWidth = window.innerWidth - viewportPadding * 2;
+      let targetHeight = Math.min(maxHeight, maxWidth * 4 / 3);
+      let targetWidth = targetHeight * 3 / 4;
+
+      if (targetWidth > maxWidth) {
+        targetWidth = maxWidth;
+        targetHeight = targetWidth * 4 / 3;
+      }
+
+      backdrop.className = 'photo-focus-backdrop';
+      preview.className = 'photo-focus-image';
+      preview.src = src;
+      preview.alt = '';
+      preview.style.width = `${rect.width}px`;
+      preview.style.height = `${rect.height}px`;
+      preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
+      document.body.append(backdrop, preview);
+
+      requestAnimationFrame(() => {
+        backdrop.classList.add('visible');
+        preview.style.width = `${targetWidth}px`;
+        preview.style.height = `${targetHeight}px`;
+        preview.style.borderRadius = '22px';
+        preview.style.transform = `translate3d(${(window.innerWidth - targetWidth) / 2}px, ${(window.innerHeight - targetHeight) / 2}px, 0)`;
+      });
+
+      const close = () => zoomPhotoOut(sourceEl, backdrop, preview, close);
+      backdrop.addEventListener('click', close);
+      preview.addEventListener('click', close);
+      window.addEventListener('wheel', close, { once: true });
+    }
+
+    // 7. Zoom out quay lại grid.
+    function zoomPhotoOut(sourceEl, backdrop, preview, close) {
+      const rect = sourceEl.getBoundingClientRect();
+      backdrop.removeEventListener('click', close);
+      preview.removeEventListener('click', close);
+      backdrop.classList.remove('visible');
+      preview.style.width = `${rect.width}px`;
+      preview.style.height = `${rect.height}px`;
+      preview.style.borderRadius = '50%';
+      preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
+
+      setTimeout(() => {
+        backdrop.remove();
+        preview.remove();
+        photoFocused = false;
+      }, 430);
+    }
+
+    function fadeToScene(renderScene) {
+      messageText.classList.add('fade-out');
+      setTimeout(() => {
+        renderScene();
+        requestAnimationFrame(() => {
+          messageText.classList.remove('fade-out');
+        });
+      }, 800);
+    }
+
+    function renderTimeCounter() {
+      finalScene = 'time';
+      messageLayer.classList.remove('photo-mode', 'photo-background');
+      photoGridLayer.classList.remove('visible');
+      messageText.classList.remove('is-title', 'is-body', 'is-finale');
       messageText.classList.add('is-time');
-      startFinalBackground();
 
       const updateTime = () => {
+        if (finalScene !== 'time') return;
         messageText.innerHTML = `
           <span class="time-title">Yêu nhau bao lâu rùi?</span>
           <span class="time-value">${formatElapsedTime(LOVE_START_DATE, new Date())}</span>
+          <span class="mode-actions">
+            <button class="mode-button" type="button" data-action="timeline">Timeline</button>
+            <button class="mode-button" type="button" data-action="photos">Romantic</button>
+          </span>
         `;
       };
 
       updateTime();
-      setInterval(updateTime, 1000);
+      if (!finalTimeInterval) {
+        finalTimeInterval = setInterval(updateTime, 1000);
+      }
     }
+
+    function renderTimelineScene() {
+      finalScene = 'timeline';
+      messageLayer.classList.remove('photo-mode', 'photo-background');
+      photoGridLayer.classList.remove('visible');
+      messageText.classList.remove('is-title', 'is-finale', 'is-time');
+      messageText.classList.add('is-body');
+      messageText.innerHTML = `
+        <span class="time-title">Timeline lịch hẹn</span>
+        <span class="time-value">Mình sẽ thêm timeline ở đây sau khi bạn cung cấp nội dung.</span>
+        <span class="mode-actions">
+          <button class="mode-button" type="button" data-action="back-time">Quay lại</button>
+        </span>
+      `;
+    }
+
+    function renderPhotoScene() {
+      finalScene = 'photos';
+      buildPhotoGrid();
+      startHoneycombAnimation();
+      messageLayer.classList.add('photo-background', 'photo-mode');
+      photoGridLayer.classList.add('visible');
+      messageText.classList.remove('is-title', 'is-body', 'is-finale');
+      messageText.classList.add('is-time');
+      messageText.innerHTML = `
+        <span class="time-title">Kỷ niệm tụi mình</span>
+        <span class="mode-actions">
+          <button class="mode-button" type="button" data-action="back-time">Quay lại</button>
+        </span>
+      `;
+    }
+
+    function showRealtimeLoveCounter() {
+      messageText.classList.remove('fade-out', 'is-title', 'is-body', 'is-finale');
+      messageText.classList.add('is-time');
+      startFinalBackground();
+      renderTimeCounter();
+    }
+
+    messageText.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+
+      const action = button.dataset.action;
+      if (action === 'timeline') {
+        fadeToScene(renderTimelineScene);
+      } else if (action === 'photos') {
+        fadeToScene(renderPhotoScene);
+      } else if (action === 'back-time') {
+        fadeToScene(renderTimeCounter);
+      }
+    });
+
+    photoGridLayer.addEventListener('pointerdown', handleHoneycombPointerDown);
+    photoGridLayer.addEventListener('pointermove', handleHoneycombPointerMove);
+    photoGridLayer.addEventListener('pointerup', handleHoneycombPointerUp);
+    photoGridLayer.addEventListener('pointercancel', handleHoneycombPointerUp);
+    photoGridLayer.addEventListener('wheel', (event) => {
+      if (!photoGridLayer.classList.contains('visible') || photoFocused) return;
+      event.preventDefault();
+      honeycombState.targetX -= event.deltaX;
+      honeycombState.targetY -= event.deltaY;
+    }, { passive: false });
 
     function showMessageLine(lineIndex = 0) {
       if (lineIndex >= MESSAGE_LINES.length) {
