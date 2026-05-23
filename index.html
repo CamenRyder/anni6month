@@ -86,9 +86,10 @@
       padding: 2rem 18px;
       opacity: 0;
       pointer-events: none;
+      z-index: 20;
       transition: opacity 1.8s ease 0.3s;
       background: #000;
-      overflow-y: auto;
+      overflow: hidden;
     }
     #message-layer.visible { opacity: 1; pointer-events: auto; }
 
@@ -96,6 +97,8 @@
       max-width: 520px;
       width: 100%;
       text-align: center;
+      position: relative;
+      z-index: 2;
     }
 
     #message-text {
@@ -112,6 +115,81 @@
 
     #message-text.is-title { text-align: center; }
     #message-text.is-body { text-align: left; }
+    #message-text.is-finale {
+      font-size: clamp(3.04rem, 12.16vw, 3.84rem);
+      text-align: center;
+      line-height: 1.2;
+    }
+    #message-text.is-time {
+      font-family: 'Times New Roman', Georgia, serif;
+      font-size: clamp(0.968rem, 4.4vw, 1.496rem);
+      line-height: 1.6;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .time-title {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: clamp(0.88rem, 3.872vw, 1.276rem);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .time-value {
+      display: block;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .floating-bg-item {
+      position: absolute;
+      bottom: -3rem;
+      left: var(--x);
+      z-index: 1;
+      pointer-events: none;
+      user-select: none;
+      animation: float-up var(--duration) linear infinite;
+      animation-delay: var(--delay);
+    }
+
+    .floating-bg-item.emoji {
+      font-size: var(--size);
+      opacity: 0.62;
+    }
+
+    .floating-bg-item.text {
+      color: rgba(255, 255, 255, 0.72);
+      font-family: 'Times New Roman', Georgia, serif;
+      font-size: var(--size);
+      font-style: italic;
+      letter-spacing: 0.04em;
+      opacity: 0.68;
+      white-space: nowrap;
+    }
+
+    .floating-bg-item.bubble {
+      width: var(--size);
+      height: var(--size);
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      border-radius: 999px;
+      background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.12) 42%, rgba(255, 255, 255, 0.02) 70%);
+      box-shadow: inset -0.12rem -0.16rem 0.35rem rgba(255, 255, 255, 0.12);
+      opacity: 0.5;
+    }
+
+    @keyframes float-up {
+      0% {
+        transform: translate3d(0, 0, 0) scale(0.9) rotate(0deg);
+        opacity: 0;
+      }
+      12% { opacity: 0.62; }
+      50% { transform: translate3d(var(--drift), -55vh, 0) scale(1) rotate(14deg); }
+      100% {
+        transform: translate3d(calc(var(--drift) * -0.45), -112vh, 0) scale(1.08) rotate(32deg);
+        opacity: 0;
+      }
+    }
 
   </style>
 </head>
@@ -154,6 +232,7 @@
     const counterLayer  = document.getElementById('counter-layer');
     const messageLayer  = document.getElementById('message-layer');
     const messageText   = document.getElementById('message-text');
+    let finalBackgroundStarted = false;
 
     const MESSAGE =
 `Happy Anniversary 🎉
@@ -164,11 +243,12 @@ Quá nhiều cái ôm, quá nhiều mimi, quá nhiều những km cùng với nh
 
 Quá nhiều nên mình yêu Beo nhiều quá ❤️
 
-Cảm ơn Beo đã đồng hành cùng mình 6 tháng qua. C tiếp tục như thế đến khi về chung 1 nhà luôn he =)), 
+Cảm ơn Beo đã đồng hành cùng mình 6 tháng qua. Cậu tiếp tục như thế đến khi về chung 1 nhà luôn he =)), 
 
-Love you Beo ❤️`;
+I love Beo ❤️`;
 
     const MESSAGE_LINES = MESSAGE.split(/\n\s*\n/);
+    const LOVE_START_DATE = new Date(2025, 10, 23, 0, 0, 0);
 
     const COUNT_DURATION = 12000;
     const COUNT_TARGET   = 150;
@@ -210,12 +290,74 @@ Love you Beo ❤️`;
       }
     }
 
-    function showMessageLine(lineIndex = 0) {
-      if (lineIndex >= MESSAGE_LINES.length) return;
+    function formatElapsedTime(fromDate, toDate) {
+      const totalSeconds = Math.max(0, Math.floor((toDate - fromDate) / 1000));
+      const days = Math.floor(totalSeconds / 86400);
+      const hours = Math.floor((totalSeconds % 86400) / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
 
-      messageText.classList.remove('fade-out');
+      return `${String(days).padStart(2, '0')} ngày, ${String(hours).padStart(2, '0')} giờ : ${String(minutes).padStart(2, '0')} phút : ${String(seconds).padStart(2, '0')} giây`;
+    }
+
+    function startFinalBackground() {
+      if (finalBackgroundStarted) return;
+      finalBackgroundStarted = true;
+
+      const icons = ['❤️', '💕', '🌸', '🌷'];
+      const floatingTexts = ['iuu beo', 'moa', 'hun ah', 'nhớ beo', 'tí gặp ko?', 'nah luv u'];
+      const textSizes = ['8px', '9px', '10px'];
+
+      for (let i = 0; i < 56; i++) {
+        const item = document.createElement('span');
+        const itemType = i % 4 === 0 ? 'bubble' : i % 4 === 1 ? 'text' : 'emoji';
+        item.className = `floating-bg-item ${itemType}`;
+
+        if (itemType === 'emoji') {
+          item.textContent = icons[Math.floor(Math.random() * icons.length)];
+        } else if (itemType === 'text') {
+          item.textContent = floatingTexts[Math.floor(Math.random() * floatingTexts.length)];
+        }
+
+        item.style.setProperty('--x', `${Math.random() * 100}%`);
+        item.style.setProperty('--size', itemType === 'bubble'
+          ? `${0.45 + Math.random() * 1.15}rem`
+          : itemType === 'text'
+            ? textSizes[Math.floor(Math.random() * textSizes.length)]
+            : `${0.8 + Math.random() * 1.1}rem`);
+        item.style.setProperty('--duration', `${8 + Math.random() * 9}s`);
+        item.style.setProperty('--delay', `${-Math.random() * 12}s`);
+        item.style.setProperty('--drift', `${(Math.random() * 6 - 3).toFixed(2)}rem`);
+        messageLayer.appendChild(item);
+      }
+    }
+
+    function showRealtimeLoveCounter() {
+      messageText.classList.remove('fade-out', 'is-title', 'is-body', 'is-finale');
+      messageText.classList.add('is-time');
+      startFinalBackground();
+
+      const updateTime = () => {
+        messageText.innerHTML = `
+          <span class="time-title">Yêu nhau bao lâu rùi?</span>
+          <span class="time-value">${formatElapsedTime(LOVE_START_DATE, new Date())}</span>
+        `;
+      };
+
+      updateTime();
+      setInterval(updateTime, 1000);
+    }
+
+    function showMessageLine(lineIndex = 0) {
+      if (lineIndex >= MESSAGE_LINES.length) {
+        showRealtimeLoveCounter();
+        return;
+      }
+
+      messageText.classList.remove('fade-out', 'is-title', 'is-body', 'is-finale', 'is-time');
       messageText.classList.toggle('is-title', lineIndex === 0);
-      messageText.classList.toggle('is-body', lineIndex !== 0);
+      messageText.classList.toggle('is-body', lineIndex !== 0 && lineIndex !== MESSAGE_LINES.length - 1);
+      messageText.classList.toggle('is-finale', lineIndex === MESSAGE_LINES.length - 1);
       typeText(MESSAGE_LINES[lineIndex], 0, () => {
         setTimeout(() => {
           messageText.classList.add('fade-out');
