@@ -37,11 +37,23 @@
       text-align: center;
     }
 
+    #splash-message,
     #splash-text {
       display: block;
-      margin-bottom: 0.8rem;
       font-size: 0.9rem;
       letter-spacing: 0.08em;
+    }
+
+    #splash-message {
+      min-height: 2.4em;
+      margin-bottom: 0.8rem;
+      opacity: 0;
+      line-height: 1.35;
+      transition: opacity 0.4s ease;
+    }
+
+    #splash-message.visible {
+      opacity: 1;
     }
 
     #splash-track {
@@ -56,6 +68,10 @@
       height: 100%;
       background: #fff;
       transition: width 0.2s ease;
+    }
+
+    #splash-text {
+      margin-top: 0.8rem;
     }
 
     /* ── Background slideshow ── */
@@ -341,10 +357,11 @@
 
   <div id="splash-layer">
     <div id="splash-box">
-      <span id="splash-text">Loading 0%</span>
+      <span id="splash-message">Loading hơi lâu xí</span>
       <div id="splash-track">
         <div id="splash-progress"></div>
       </div>
+      <span id="splash-text">Loading 0%</span>
     </div>
   </div>
 
@@ -368,9 +385,32 @@
     /* ── Slideshow ── */
     const IMAGES = Array.from({ length: 35 }, (_, i) => `hinhanh/hinhanh_${String(i + 1).padStart(2, '0')}.JPG`);
     const splashLayer = document.getElementById('splash-layer');
+    const splashMessage = document.getElementById('splash-message');
     const splashText = document.getElementById('splash-text');
     const splashProgress = document.getElementById('splash-progress');
     const bgLayer = document.getElementById('bg-layer');
+    const SPLASH_MESSAGES = [
+      'Loading hơi lâu xí',
+      'Beo chờ chút nhoaâ',
+      'Beo biết mìh simp em ntn hông?',
+      'Kiểu con ong là mìh',
+      'Beo là mật hoa...',
+      'Bông hoa của mình<3',
+      'Quyết định là iu beo có hối hận ko',
+      'koo. rất hài lòng và xứng đáng',
+      'kem nhãn ngon ghê',
+      'mí cái áo beo tặng tớ thích dữ lắm',
+      'ê load lâu vữuu',
+      'ráng chờ nhoaâ',
+      'tớ thích ăn kem',
+      'vì trong kem có emm beo',
+    ];
+    const SPLASH_FALLBACK_MESSAGE = 'có thể có trục chặc, cậu nhắn mìh nha';
+    const SPLASH_MESSAGE_DURATION = 3000;
+    const SPLASH_MESSAGE_FADE_OUT_AT = 2600;
+    let splashMessageTimeout = null;
+    let splashFadeTimeout = null;
+    let splashMessageDone = false;
 
     let slides = [];
     let currentSlide = 0;
@@ -461,9 +501,35 @@ I love Beo ❤️`;
       splashProgress.style.width = `${percent}%`;
     }
 
+    function stopSplashMessages() {
+      splashMessageDone = true;
+      clearTimeout(splashMessageTimeout);
+      clearTimeout(splashFadeTimeout);
+    }
+
+    function showSplashMessage(index = 0) {
+      if (splashMessageDone) return;
+
+      const message = SPLASH_MESSAGES[index] || SPLASH_FALLBACK_MESSAGE;
+      const hasNextMessage = index < SPLASH_MESSAGES.length;
+      splashMessage.textContent = message;
+      splashMessage.classList.add('visible');
+
+      if (hasNextMessage) {
+        splashFadeTimeout = setTimeout(() => {
+          splashMessage.classList.remove('visible');
+        }, SPLASH_MESSAGE_FADE_OUT_AT);
+
+        splashMessageTimeout = setTimeout(() => {
+          showSplashMessage(index + 1);
+        }, SPLASH_MESSAGE_DURATION);
+      }
+    }
+
     function preloadImages() {
       let loadedCount = 0;
       updateSplash(loadedCount);
+      showSplashMessage();
 
       return Promise.all(IMAGES.map((src) => new Promise((resolve) => {
         const img = new Image();
@@ -489,6 +555,7 @@ I love Beo ❤️`;
 
     function startExperience() {
       buildSlides();
+      stopSplashMessages();
       splashLayer.classList.add('hidden');
       setTimeout(() => {
         splashLayer.remove();
