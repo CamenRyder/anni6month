@@ -526,7 +526,7 @@
       gap: 16,
       maxScale: 1.34,
       minScale: 0.66,
-      viewZoom: 1,
+      viewZoom: 2,
       minViewZoom: 0.82,
       maxViewZoom: 2.25,
       focusRadius: 230,
@@ -551,6 +551,24 @@ Cảm ơn Beo đã đồng hành cùng mình 6 tháng qua. Cậu tiếp tục nh
 I love Beo ❤️`;
 
     const MESSAGE_LINES = MESSAGE.split(/\n\s*\n/);
+    const TIMELINE_MESSAGE =
+`Hẹn beo ngày mai 24/5/2026 - tại nhà beo nà. lúc 15h nhoaaa. mìh sẽ có mặt lúc đóa.
+
+Mình mún:
++ 16h45: có mặt ở blank lounge tại landmark81 cùng với nhau.
++ 18h30: bọn mìh check in công viên landmark.
++ 18h45: bọn mình mở quà hố hố.
++ 19h30: bọn mình đi ăn tối tại pasta.
++ sau đó thì mimi lili moaaa.
+
+Minh ước:
++ trời quang mây tạnh.
++ beo ngồi ôm mìh và nói chuyện.
++ mimi lili trên landmark81.
++ chụp hình cho Beo và cho tụi mình.
++ thấy beo hạnh phúc.
+
+Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
     const LOVE_START_DATE = new Date(2025, 10, 23, 0, 0, 0);
 
     const COUNT_DURATION = 12000;
@@ -993,22 +1011,23 @@ I love Beo ❤️`;
       finalScene = 'timeline';
       messageLayer.classList.remove('photo-mode', 'photo-background');
       photoGridLayer.classList.remove('visible');
-      romanticBackButton.classList.remove('visible');
+      romanticBackButton.classList.add('visible');
       messageText.classList.remove('is-title', 'is-finale', 'is-time');
       messageText.classList.add('is-body');
-      messageText.innerHTML = `
-        <span class="time-title">Timeline lịch hẹn</span>
-        <span class="time-value">Mình sẽ thêm timeline ở đây sau khi bạn cung cấp nội dung.</span>
-        <span class="mode-actions">
-          <button class="mode-button" type="button" data-action="back-time">Quay lại</button>
-        </span>
-      `;
+      messageText.textContent = TIMELINE_MESSAGE;
     }
 
     function renderPhotoScene() {
       finalScene = 'photos';
       buildPhotoGrid();
       startHoneycombAnimation();
+      honeycombConfig.viewZoom = 2;
+      honeycombState.x = 0;
+      honeycombState.y = 0;
+      honeycombState.targetX = 0;
+      honeycombState.targetY = 0;
+      honeycombState.vx = 0;
+      honeycombState.vy = 0;
       messageLayer.classList.add('photo-background', 'photo-mode');
       photoGridLayer.classList.add('visible');
       romanticBackButton.classList.add('visible');
