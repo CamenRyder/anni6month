@@ -15,6 +15,49 @@
       font-family: 'Georgia', serif;
     }
 
+    #splash-layer {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+      background: #000;
+      color: #fff;
+      transition: opacity 0.8s ease;
+    }
+
+    #splash-layer.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #splash-box {
+      width: min(260px, calc(100vw - 48px));
+      text-align: center;
+    }
+
+    #splash-text {
+      display: block;
+      margin-bottom: 0.8rem;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+    }
+
+    #splash-track {
+      width: 100%;
+      height: 2px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    #splash-progress {
+      width: 0%;
+      height: 100%;
+      background: #fff;
+      transition: width 0.2s ease;
+    }
+
     /* ── Background slideshow ── */
     #bg-layer {
       position: fixed;
@@ -195,6 +238,15 @@
 </head>
 <body>
 
+  <div id="splash-layer">
+    <div id="splash-box">
+      <span id="splash-text">Loading 0%</span>
+      <div id="splash-track">
+        <div id="splash-progress"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="bg-layer"></div>
 
   <div id="counter-layer">
@@ -213,21 +265,15 @@
   <script>
     /* ── Slideshow ── */
     const IMAGES = Array.from({ length: 35 }, (_, i) => `hinhanh/hinhanh_${String(i + 1).padStart(2, '0')}.JPG`);
+    const splashLayer = document.getElementById('splash-layer');
+    const splashText = document.getElementById('splash-text');
+    const splashProgress = document.getElementById('splash-progress');
     const bgLayer = document.getElementById('bg-layer');
 
-    /* build img elements, stack them */
-    const slides = IMAGES.map((src, i) => {
-      const img = document.createElement('img');
-      img.src       = src;
-      img.className = 'slide-img' + (i === 0 ? ' active' : '');
-      img.alt       = '';
-      bgLayer.appendChild(img);
-      return img;
-    });
-
+    let slides = [];
     let currentSlide = 0;
 
-    /* ── Counter 0 → 150 in 12 s ── */
+    /* ── Counter 0 → 180 in 12 s ── */
     const counterNumEl  = document.getElementById('counter-num');
     const counterLayer  = document.getElementById('counter-layer');
     const messageLayer  = document.getElementById('message-layer');
@@ -251,8 +297,8 @@ I love Beo ❤️`;
     const LOVE_START_DATE = new Date(2025, 10, 23, 0, 0, 0);
 
     const COUNT_DURATION = 12000;
-    const COUNT_TARGET   = 150;
-    const SLIDE_EASE_START = 149;
+    const COUNT_TARGET   = 180;
+    const SLIDE_EASE_START = 179;
     let   startTime      = null;
     let   lastDisplayed  = -1;
 
@@ -276,6 +322,47 @@ I love Beo ❤️`;
       slides[currentSlide].classList.remove('active');
       slides[index].classList.add('active');
       currentSlide = index;
+    }
+
+    function updateSplash(loadedCount) {
+      const percent = Math.round((loadedCount / IMAGES.length) * 100);
+      splashText.textContent = `Loading ${percent}%`;
+      splashProgress.style.width = `${percent}%`;
+    }
+
+    function preloadImages() {
+      let loadedCount = 0;
+      updateSplash(loadedCount);
+
+      return Promise.all(IMAGES.map((src) => new Promise((resolve) => {
+        const img = new Image();
+        img.onload = img.onerror = () => {
+          loadedCount += 1;
+          updateSplash(loadedCount);
+          resolve(src);
+        };
+        img.src = src;
+      })));
+    }
+
+    function buildSlides() {
+      slides = IMAGES.map((src, i) => {
+        const img = document.createElement('img');
+        img.src       = src;
+        img.className = 'slide-img' + (i === 0 ? ' active' : '');
+        img.alt       = '';
+        bgLayer.appendChild(img);
+        return img;
+      });
+    }
+
+    function startExperience() {
+      buildSlides();
+      splashLayer.classList.add('hidden');
+      setTimeout(() => {
+        splashLayer.remove();
+      }, 900);
+      requestAnimationFrame(animateCounter);
     }
 
     function typeText(text, index = 0, onComplete = () => {}) {
@@ -399,7 +486,7 @@ I love Beo ❤️`;
       }
     }
 
-    requestAnimationFrame(animateCounter);
+    preloadImages().then(startExperience);
   </script>
 </body>
 </html>
