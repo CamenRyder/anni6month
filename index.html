@@ -291,6 +291,13 @@
       will-change: transform, opacity;
       transform: translate3d(-50%, -50%, 0);
       backface-visibility: hidden;
+      transition: border-color 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
+    }
+
+    #message-layer.photo-mode.is-moving .honeycomb-item {
+      border-color: rgba(255, 255, 255, 0.42);
+      box-shadow: 0 0.7rem 1.8rem rgba(0, 0, 0, 0.34), 0 0 1rem rgba(255, 255, 255, 0.22);
+      filter: blur(0.45px);
     }
 
     .honeycomb-item img {
@@ -519,6 +526,8 @@
       isPinching: false,
       pinchStartDistance: 0,
       pinchStartZoom: 1,
+      maxZoomActivated: false,
+      focusedItem: null,
       moved: false,
     };
     const honeycombConfig = {
@@ -759,7 +768,7 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
         });
 
         photoGridLayer.appendChild(item);
-        honeycombItems.push({ el: item, x, y });
+        honeycombItems.push({ el: item, src, x, y });
       });
     }
 
@@ -792,6 +801,15 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
     }
 
     function renderHoneycomb() {
+      const isMoving = (
+        honeycombState.isDragging ||
+        Math.abs(honeycombState.vx) > 0.05 ||
+        Math.abs(honeycombState.vy) > 0.05 ||
+        Math.abs(honeycombState.targetX - honeycombState.x) > 0.5 ||
+        Math.abs(honeycombState.targetY - honeycombState.y) > 0.5
+      );
+      messageLayer.classList.toggle('is-moving', finalScene === 'photos' && isMoving);
+
       if (honeycombState.isDragging) {
         honeycombState.x += (honeycombState.targetX - honeycombState.x) * honeycombConfig.springStrength;
         honeycombState.y += (honeycombState.targetY - honeycombState.y) * honeycombConfig.springStrength;
@@ -805,16 +823,27 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
         honeycombState.y += (honeycombState.targetY - honeycombState.y) * honeycombConfig.springStrength;
       }
 
+      let nearestItem = null;
+      let nearestDistance = Infinity;
+
       honeycombItems.forEach((item) => {
         const positionedX = item.x * honeycombConfig.viewZoom + honeycombState.x;
         const positionedY = item.y * honeycombConfig.viewZoom + honeycombState.y;
         const screenX = window.innerWidth / 2 + positionedX;
         const screenY = window.innerHeight / 2 + positionedY;
+        const centerDistance = Math.hypot(screenX - window.innerWidth / 2, screenY - window.innerHeight / 2);
         const scale = getItemScale(screenX, screenY);
         const depth = 1 + (scale - honeycombConfig.minScale) * 0.12;
         item.el.style.transform = `translate3d(calc(-50% + ${positionedX}px), calc(-50% + ${positionedY}px), 0) scale(${scale * depth * honeycombConfig.viewZoom})`;
         item.el.style.opacity = String(0.5 + scale * 0.38);
+
+        if (centerDistance < nearestDistance) {
+          nearestDistance = centerDistance;
+          nearestItem = item;
+        }
       });
+
+      honeycombState.focusedItem = nearestItem;
 
       requestAnimationFrame(renderHoneycomb);
     }
@@ -864,6 +893,17 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
         const nextZoom = honeycombState.pinchStartZoom * (distance / Math.max(1, honeycombState.pinchStartDistance));
         honeycombConfig.viewZoom = clamp(nextZoom, honeycombConfig.minViewZoom, honeycombConfig.maxViewZoom);
         clampHoneycombPan();
+
+        if (
+          nextZoom >= honeycombConfig.maxViewZoom &&
+          !honeycombState.maxZoomActivated &&
+          honeycombState.focusedItem
+        ) {
+          honeycombState.maxZoomActivated = true;
+          honeycombState.isPinching = false;
+          honeycombState.activePointers.clear();
+          zoomPhotoIn(honeycombState.focusedItem.el, honeycombState.focusedItem.src);
+        }
         return;
       }
 
@@ -968,6 +1008,7 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
         backdrop.remove();
         preview.remove();
         photoFocused = false;
+        honeycombState.maxZoomActivated = false;
       }, 430);
     }
 
