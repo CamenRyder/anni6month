@@ -291,13 +291,6 @@
       will-change: transform, opacity;
       transform: translate3d(-50%, -50%, 0);
       backface-visibility: hidden;
-      transition: border-color 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
-    }
-
-    #message-layer.photo-mode.is-moving .honeycomb-item {
-      border-color: rgba(255, 255, 255, 0.42);
-      box-shadow: 0 0.7rem 1.8rem rgba(0, 0, 0, 0.34), 0 0 1rem rgba(255, 255, 255, 0.22);
-      filter: blur(0.45px);
     }
 
     .honeycomb-item img {
@@ -454,8 +447,17 @@
   </div>
 
   <script>
+    /* ── Cutoff: sau 11:00 ngày 24/5/2026 thì bỏ qua đoạn typewriter MESSAGE ── */
+    const ANNIVERSARY_MESSAGE_CUTOFF = new Date(2026, 4, 24, 11, 0, 0);
+    function isPastAnniversaryMessage() {
+      return Date.now() >= ANNIVERSARY_MESSAGE_CUTOFF.getTime();
+    }
+
     /* ── Slideshow ── */
-    const IMAGES = Array.from({ length: 35 }, (_, i) => `hinhanh/hinhanh_${String(i + 1).padStart(2, '0')}.JPG`);
+    const IMAGE_PATH_PREFIX = 'hinhanh/hinhanh_';
+    const IMAGE_EXT = '.JPG';
+    const MAX_IMAGE_PROBE = 200;
+    const IMAGES = [];
     const splashLayer = document.getElementById('splash-layer');
     const splashMessage = document.getElementById('splash-message');
     const splashText = document.getElementById('splash-text');
@@ -608,10 +610,15 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
       currentSlide = index;
     }
 
-    function updateSplash(loadedCount) {
-      const percent = Math.round((loadedCount / IMAGES.length) * 100);
-      splashText.textContent = `Loading ${percent}%`;
-      splashProgress.style.width = `${percent}%`;
+    function updateSplashCount(loadedCount) {
+      splashText.textContent = `Đang dò ảnh... ${loadedCount}`;
+      const fakePercent = 92 * (1 - Math.exp(-loadedCount / 14));
+      splashProgress.style.width = `${fakePercent}%`;
+    }
+
+    function finalizeSplash(total) {
+      splashText.textContent = total > 0 ? `Đã tải ${total} ảnh` : 'Không tìm thấy ảnh nào';
+      splashProgress.style.width = total > 0 ? '100%' : '0%';
     }
 
     function stopSplashMessages() {
@@ -644,20 +651,34 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
       }
     }
 
-    function preloadImages() {
-      let loadedCount = 0;
-      updateSplash(loadedCount);
+    function probeAndLoadImages() {
+      updateSplashCount(0);
       showSplashMessage();
 
-      return Promise.all(IMAGES.map((src) => new Promise((resolve) => {
-        const img = new Image();
-        img.onload = img.onerror = () => {
-          loadedCount += 1;
-          updateSplash(loadedCount);
-          resolve(src);
+      return new Promise((resolve) => {
+        let i = 1;
+        const tryNext = () => {
+          if (i > MAX_IMAGE_PROBE) {
+            finalizeSplash(IMAGES.length);
+            resolve(IMAGES.length);
+            return;
+          }
+          const src = `${IMAGE_PATH_PREFIX}${String(i).padStart(2, '0')}${IMAGE_EXT}`;
+          const img = new Image();
+          img.onload = () => {
+            IMAGES.push(src);
+            updateSplashCount(IMAGES.length);
+            i += 1;
+            tryNext();
+          };
+          img.onerror = () => {
+            finalizeSplash(IMAGES.length);
+            resolve(IMAGES.length);
+          };
+          img.src = src;
         };
-        img.src = src;
-      })));
+        tryNext();
+      });
     }
 
     function buildSlides() {
@@ -735,9 +756,9 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
       }
     }
 
-    // 1. Khởi tạo dữ liệu 36 ảnh.
+    // 1. Khởi tạo dữ liệu ảnh động theo IMAGES đã probe.
     function getRomanticImages() {
-      return Array.from({ length: 36 }, (_, i) => IMAGES[i % IMAGES.length]);
+      return IMAGES.slice();
     }
 
     // 2. Render honeycomb grid.
@@ -746,14 +767,18 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
       photoGridBuilt = true;
 
       const images = getRomanticImages();
+      if (!images.length) return;
+
+      const cols = 6;
+      const totalRows = Math.ceil(images.length / cols);
       const stepX = honeycombConfig.itemSize + honeycombConfig.gap;
       const stepY = (honeycombConfig.itemSize + honeycombConfig.gap) * 0.84;
 
       images.forEach((src, index) => {
-        const row = Math.floor(index / 6);
-        const col = index % 6;
-        const x = (col - 2.5) * stepX + (row % 2 ? stepX / 2 : 0);
-        const y = (row - 2.5) * stepY;
+        const row = Math.floor(index / cols);
+        const col = index % cols;
+        const x = (col - (cols - 1) / 2) * stepX + (row % 2 ? stepX / 2 : 0);
+        const y = (row - (totalRows - 1) / 2) * stepY;
         const item = document.createElement('button');
         const img = document.createElement('img');
 
@@ -801,15 +826,6 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
     }
 
     function renderHoneycomb() {
-      const isMoving = (
-        honeycombState.isDragging ||
-        Math.abs(honeycombState.vx) > 0.05 ||
-        Math.abs(honeycombState.vy) > 0.05 ||
-        Math.abs(honeycombState.targetX - honeycombState.x) > 0.5 ||
-        Math.abs(honeycombState.targetY - honeycombState.y) > 0.5
-      );
-      messageLayer.classList.toggle('is-moving', finalScene === 'photos' && isMoving);
-
       if (honeycombState.isDragging) {
         honeycombState.x += (honeycombState.targetX - honeycombState.x) * honeycombConfig.springStrength;
         honeycombState.y += (honeycombState.targetY - honeycombState.y) * honeycombConfig.springStrength;
@@ -1159,12 +1175,18 @@ Hãy nhắn lại mìn để xác nhận hoặc điều chỉnh nhen`;
         counterLayer.classList.add('fade-out');
         setTimeout(() => {
           messageLayer.classList.add('visible');
-          showMessageLine();
+          if (isPastAnniversaryMessage()) {
+            showRealtimeLoveCounter();
+          } else {
+            showMessageLine();
+          }
         }, 2000);
       }
     }
 
-    preloadImages().then(startExperience);
+    probeAndLoadImages().then((count) => {
+      if (count > 0) startExperience();
+    });
   </script>
 </body>
 </html>
